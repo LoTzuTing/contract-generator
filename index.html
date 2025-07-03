@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>合約產生器 (穩定載入版)</title>
+    <title>合約產生器 (GitHub 最佳實踐版)</title>
     <!-- 引入 Tailwind CSS 方便快速美化頁面 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 引入 jsPDF 函式庫，這是生成 PDF 的核心工具 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <!-- 再次使用外部 JS 檔案來載入字體資料，但這次我們會確保它載入完成後才啟用功能 -->
-    <script src="https://gist.githubusercontent.com/susu/43f7c32be3232c40c792f7258572e410/raw/ca9c5722a0531063467431f765279479b32e293c/SourceHanSans-Normal-Base64.js"></script>
+    <!-- 不再需要任何外部字體 JS 檔案 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
@@ -17,7 +16,6 @@
         body {
             font-family: 'Noto Sans TC', sans-serif;
         }
-        /* 讓禁用按鈕的游標樣式更明確 */
         button:disabled {
             cursor: not-allowed;
         }
@@ -40,24 +38,17 @@
         <!-- 訊息提示框 -->
         <div id="message-box" class="hidden mb-4 p-3 text-center rounded-lg"></div>
 
-        <!-- 按鈕和載入狀態 -->
-        <div id="button-container">
-             <!-- 初始狀態：顯示載入提示 -->
-            <div id="loading-state" class="text-center p-4 bg-gray-100 rounded-lg">
-                <p class="font-medium text-gray-600">字體準備中，請稍候...</p>
-            </div>
-            <!-- 按鈕預設為隱藏 -->
-            <div id="action-buttons" class="hidden grid grid-cols-1 md:grid-cols-3 gap-4">
-                <button onclick="generateContract(1)" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105">
-                    產生「保密協議」
-                </button>
-                <button onclick="generateContract(2)" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform transform hover:scale-105">
-                    產生「勞動合約」
-                </button>
-                <button onclick="generateContract(3)" class="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-transform transform hover:scale-105">
-                    產生「租賃合約」
-                </button>
-            </div>
+        <!-- 按鈕 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button onclick="generateContract(1)" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105">
+                產生「保密協議」
+            </button>
+            <button onclick="generateContract(2)" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform transform hover:scale-105">
+                產生「勞動合約」
+            </button>
+            <button onclick="generateContract(3)" class="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-transform transform hover:scale-105">
+                產生「租賃合約」
+            </button>
         </div>
 
         <div class="mt-8 text-center text-sm text-gray-400">
@@ -68,120 +59,83 @@
     <script>
         const { jsPDF } = window.jspdf;
         
+        // 用一個變數來快取字體資料，避免重複載入
+        let loadedFontBase64 = null;
+
         const contractTemplates = {
-            1: {
-                title: "保密協議 (NDA)",
-                filename: "Confidentiality_Agreement.pdf",
-                content: `
+            1: { title: "保密協議 (NDA)", filename: "Confidentiality_Agreement.pdf", content: `...` }, // 內容省略以保持簡潔
+            2: { title: "勞動合約", filename: "Employment_Contract.pdf", content: `...` },
+            3: { title: "房屋租賃合約", filename: "Rental_Agreement.pdf", content: `...` }
+        };
+        // 為了方便閱讀，將完整的合約內容移到函式外面
+        contractTemplates[1].content = `
 立協議書人：甲方（揭露方）與乙方 ({{NAME}})（收受方）
-
 茲因甲方擬向乙方揭露其擁有之機密資訊，為確保甲方之機密資訊不致外洩，雙方爰同意訂定下列條款，以資共同遵守：
-
 第一條：機密資訊
 本協議所稱之「機密資訊」，係指甲方以口頭或書面方式標示為「機密」或「限閱」等類似字樣，或依其性質應認定為機密之任何商業、技術、財務、產品或營運等相關資訊。
-
 第二條：保密義務
 乙方同意，對於自甲方收受之任何機密資訊，均應以善良管理人之注意義務妥善保管，除為執行雙方合作業務之目的外，不得洩漏或交付予任何第三人。
-
 第三條：協議期限
 本協議自簽署之日起生效，有效期間為五年。
-
 立協議書人：
 甲方：____________________
 乙方：{{NAME}}
 日期：____________________
-                `
-            },
-            2: {
-                title: "勞動合約",
-                filename: "Employment_Contract.pdf",
-                content: `
+`;
+        contractTemplates[2].content = `
 立合約書人：
 甲方（雇主）：____________________
 乙方（勞工）：{{NAME}}
-
 茲為聘僱事宜，經雙方同意訂立勞動契約，條款如下：
-
 第一條：職務
 甲方聘僱乙方擔任 ___________ 職務。
-
 第二條：工作地點
 乙方之工作地點為 ____________________。
-
 第三條：薪資
 薪資議定為每月新台幣 ___________ 元整，於次月五日前發放。
-
 第四條：合約期間
 本合約為不定期契約，自民國 ____ 年 __ 月 __ 日起生效。
-
 立合約書人：
 甲方：____________________
 乙方：{{NAME}}
 日期：____________________
-                `
-            },
-            3: {
-                title: "房屋租賃合約",
-                filename: "Rental_Agreement.pdf",
-                content: `
+`;
+        contractTemplates[3].content = `
 立合約書人：
 出租人（以下簡稱甲方）：____________________
 承租人（以下簡稱乙方）：{{NAME}}
-
 茲為房屋租賃事宜，雙方同意訂立本契約，條款如下：
-
 第一條：租賃標的
 房屋座落於 ____________________。
-
 第二條：租賃期間
 自民國 ____ 年 __ 月 __ 日起至民國 ____ 年 __ 月 __ 日止。
-
 第三條：租金
 每月租金為新台幣 ___________ 元整，乙方應於每月五日前支付予甲方。
-
 第四條：押金
 乙方應於簽約時支付甲方新台幣 ___________ 元整作為押金。
-
-立協議書人：
+立合約書人：
 甲方：____________________
 乙方：{{NAME}}
 日期：____________________
-                `
+`;
+
+        // 將 ArrayBuffer 轉換為 Base64 字串的輔助函式
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
             }
-        };
-
-        // --- 核心變更：字體載入檢查機制 ---
-        document.addEventListener('DOMContentLoaded', () => {
-            const loadingState = document.getElementById('loading-state');
-            const actionButtons = document.getElementById('action-buttons');
-            const messageBox = document.getElementById('message-box');
-            let attempts = 0;
-            const maxAttempts = 50; // 最多等待 10 秒 (50 * 200ms)
-
-            const checkFontInterval = setInterval(() => {
-                // 檢查從外部 script 載入的 fontBase64 變數是否存在
-                if (typeof fontBase64 !== 'undefined') {
-                    clearInterval(checkFontInterval);
-                    loadingState.classList.add('hidden');
-                    actionButtons.classList.remove('hidden');
-                } else if (attempts >= maxAttempts) {
-                    clearInterval(checkFontInterval);
-                    loadingState.classList.add('hidden');
-                    messageBox.textContent = '字體檔案載入逾時，請重新整理頁面。';
-                    messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-700');
-                    messageBox.classList.add('bg-red-100', 'text-red-700');
-                }
-                attempts++;
-            }, 200); // 每 200 毫秒檢查一次
-        });
-
+            return window.btoa(binary);
+        }
 
         // 產生 PDF 的主要函式
         async function generateContract(type) {
             const nameInput = document.getElementById('name-input');
             const messageBox = document.getElementById('message-box');
             const name = nameInput.value.trim();
-            const contractButtons = document.querySelectorAll('#action-buttons button');
+            const contractButtons = document.querySelectorAll('button');
             const clickedButton = contractButtons[type - 1];
 
             if (!name) {
@@ -200,21 +154,29 @@
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    產生中...
+                    處理中...
                 </span>
             `;
 
             try {
-                await new Promise(resolve => setTimeout(resolve, 50));
+                // --- 核心變更：在需要時才載入字體 ---
+                if (!loadedFontBase64) {
+                    clickedButton.querySelector('span').textContent = '首次載入字體...';
+                    const response = await fetch('NotoSansTC-Regular.ttf');
+                    if (!response.ok) {
+                        throw new Error(`無法載入字體檔案 (HTTP ${response.status})`);
+                    }
+                    const fontBuffer = await response.arrayBuffer();
+                    loadedFontBase64 = arrayBufferToBase64(fontBuffer);
+                }
 
                 const template = contractTemplates[type];
                 const finalContent = template.content.replace(/{{NAME}}/g, name);
                 const doc = new jsPDF();
                 
-                // 此時 fontBase64 變數保證是可用的
-                doc.addFileToVFS('SourceHanSans-Normal.ttf', fontBase64);
-                doc.addFont('SourceHanSans-Normal.ttf', 'SourceHanSans', 'normal');
-                doc.setFont('SourceHanSans');
+                doc.addFileToVFS('NotoSansTC-Regular.ttf', loadedFontBase64);
+                doc.addFont('NotoSansTC-Regular.ttf', 'NotoSansTC', 'normal');
+                doc.setFont('NotoSansTC');
 
                 const pageHeight = doc.internal.pageSize.height;
                 const pageWidth = doc.internal.pageSize.width;
@@ -233,7 +195,7 @@
 
             } catch (error) {
                 console.error("PDF 產生失敗:", error);
-                messageBox.textContent = `產生 PDF 失敗: ${error.message}`;
+                messageBox.textContent = `產生 PDF 失敗: ${error.message}。請確認字體檔案 'NotoSansTC-Regular.ttf' 已上傳至專案根目錄。`;
                 messageBox.className = 'mb-4 p-3 text-center rounded-lg bg-red-100 text-red-700';
             } finally {
                 contractButtons.forEach(button => button.disabled = false);
