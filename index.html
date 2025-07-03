@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>合約產生器 (GitHub 最佳實踐版)</title>
+    <title>合約產生器 (新增全部下載)</title>
     <!-- 引入 Tailwind CSS 方便快速美化頁面 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 引入 jsPDF 函式庫，這是生成 PDF 的核心工具 -->
@@ -21,13 +21,14 @@
         }
     </style>
 </head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+<body class="bg-gray-100 flex items-center justify-center min-h-screen py-8">
 
-    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-2xl mx-4">
+    <div class="bg-white p-6 md:p-8 rounded-xl shadow-lg w-full max-w-2xl mx-4">
         
         <div class="mb-8 text-center">
-            <h1 class="text-3xl font-bold text-gray-800">簡易合約產生器</h1>
-            <p class="text-gray-500 mt-2">輸入名稱，即可快速生成三種不同的合約 PDF 檔案。</p>
+            <!-- 行動裝置優化：在小螢幕上標題字體略小 -->
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800">簡易合約產生器</h1>
+            <p class="text-gray-500 mt-2">輸入名稱，即可快速生成合約</p>
         </div>
 
         <div class="mb-6">
@@ -38,7 +39,7 @@
         <!-- 訊息提示框 -->
         <div id="message-box" class="hidden mb-4 p-3 text-center rounded-lg"></div>
 
-        <!-- 按鈕 -->
+        <!-- 按鈕 (Tailwind 的 grid 系統已自動處理響應式) -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button onclick="generateContract(1)" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105">
                 產生「保密協議」
@@ -50,6 +51,14 @@
                 產生「租賃合約」
             </button>
         </div>
+        
+        <!-- 新增「一次下載全部」按鈕 -->
+        <div class="mt-4 border-t pt-4">
+             <button onclick="generateAllContracts()" id="download-all-btn" class="w-full bg-gray-700 text-white font-bold py-3 px-4 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105">
+                一次下載全部
+            </button>
+        </div>
+
 
         <div class="mt-8 text-center text-sm text-gray-400">
             <p>&copy; 2025 簡易合約產生器. All Rights Reserved.</p>
@@ -59,17 +68,14 @@
     <script>
         const { jsPDF } = window.jspdf;
         
-        // 用一個變數來快取字體資料，避免重複載入
         let loadedFontBase64 = null;
-        // **核心修正**：定義正確的字體檔名
         const fontFileName = 'NotoSansTC-VariableFont_wght.ttf';
 
         const contractTemplates = {
-            1: { title: "保密協議 (NDA)", filename: "Confidentiality_Agreement.pdf", content: `...` }, // 內容省略以保持簡潔
+            1: { title: "保密協議 (NDA)", filename: "Confidentiality_Agreement.pdf", content: `...` },
             2: { title: "勞動合約", filename: "Employment_Contract.pdf", content: `...` },
             3: { title: "房屋租賃合約", filename: "Rental_Agreement.pdf", content: `...` }
         };
-        // 為了方便閱讀，將完整的合約內容移到函式外面
         contractTemplates[1].content = `
 立協議書人：甲方（揭露方）與乙方 ({{NAME}})（收受方）
 茲因甲方擬向乙方揭露其擁有之機密資訊，為確保甲方之機密資訊不致外洩，雙方爰同意訂定下列條款，以資共同遵守：
@@ -121,7 +127,6 @@
 日期：____________________
 `;
 
-        // 將 ArrayBuffer 轉換為 Base64 字串的輔助函式
         function arrayBufferToBase64(buffer) {
             let binary = '';
             const bytes = new Uint8Array(buffer);
@@ -132,13 +137,30 @@
             return window.btoa(binary);
         }
 
-        // 產生 PDF 的主要函式
+        async function loadFont(button) {
+             if (!loadedFontBase64) {
+                const originalText = button.innerHTML;
+                button.querySelector('span').textContent = '首次載入字體...';
+                try {
+                    const response = await fetch(`./${fontFileName}`);
+                    if (!response.ok) {
+                        throw new Error(`無法載入字體檔案 (HTTP ${response.status})`);
+                    }
+                    const fontBuffer = await response.arrayBuffer();
+                    loadedFontBase64 = arrayBufferToBase64(fontBuffer);
+                } finally {
+                    // 恢復按鈕文字，即使載入失敗
+                    button.innerHTML = originalText;
+                }
+            }
+        }
+
         async function generateContract(type) {
             const nameInput = document.getElementById('name-input');
             const messageBox = document.getElementById('message-box');
             const name = nameInput.value.trim();
-            const contractButtons = document.querySelectorAll('button');
-            const clickedButton = contractButtons[type - 1];
+            const allButtons = document.querySelectorAll('button');
+            const clickedButton = allButtons[type - 1];
 
             if (!name) {
                 messageBox.textContent = '請先輸入簽署人姓名！';
@@ -149,7 +171,7 @@
             }
 
             const originalButtonText = clickedButton.innerHTML;
-            contractButtons.forEach(button => button.disabled = true);
+            allButtons.forEach(button => button.disabled = true);
             clickedButton.innerHTML = `
                 <span class="flex items-center justify-center">
                     <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -161,23 +183,12 @@
             `;
 
             try {
-                // 在需要時才載入字體
-                if (!loadedFontBase64) {
-                    clickedButton.querySelector('span').textContent = '首次載入字體...';
-                    // **核心修正**：使用正確的字體檔名來抓取檔案
-                    const response = await fetch(`./${fontFileName}`);
-                    if (!response.ok) {
-                        throw new Error(`無法載入字體檔案 (HTTP ${response.status})`);
-                    }
-                    const fontBuffer = await response.arrayBuffer();
-                    loadedFontBase64 = arrayBufferToBase64(fontBuffer);
-                }
-
+                await loadFont(clickedButton);
+                
                 const template = contractTemplates[type];
                 const finalContent = template.content.replace(/{{NAME}}/g, name);
                 const doc = new jsPDF();
                 
-                // **核心修正**：在 PDF 中註冊字體時，也使用正確的檔名
                 doc.addFileToVFS(fontFileName, loadedFontBase64);
                 doc.addFont(fontFileName, 'NotoSansTC', 'normal');
                 doc.setFont('NotoSansTC');
@@ -202,8 +213,71 @@
                 messageBox.textContent = `產生 PDF 失敗: ${error.message}。請確認字體檔案 '${fontFileName}' 已上傳至專案根目錄。`;
                 messageBox.className = 'mb-4 p-3 text-center rounded-lg bg-red-100 text-red-700';
             } finally {
-                contractButtons.forEach(button => button.disabled = false);
+                allButtons.forEach(button => button.disabled = false);
                 clickedButton.innerHTML = originalButtonText;
+            }
+        }
+        
+        async function generateAllContracts() {
+            const nameInput = document.getElementById('name-input');
+            const messageBox = document.getElementById('message-box');
+            const name = nameInput.value.trim();
+            const allButtons = document.querySelectorAll('button');
+            const downloadAllButton = document.getElementById('download-all-btn');
+
+            if (!name) {
+                messageBox.textContent = '請先輸入簽署人姓名！';
+                messageBox.className = 'mb-4 p-3 text-center rounded-lg bg-red-100 text-red-700';
+                return;
+            } else {
+                messageBox.classList.add('hidden');
+            }
+
+            const originalButtonText = downloadAllButton.innerHTML;
+            allButtons.forEach(button => button.disabled = true);
+            downloadAllButton.innerHTML = `
+                <span class="flex items-center justify-center">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    處理中...
+                </span>
+            `;
+
+            try {
+                await loadFont(downloadAllButton);
+
+                for (const type in contractTemplates) {
+                    const template = contractTemplates[type];
+                    const finalContent = template.content.replace(/{{NAME}}/g, name);
+                    const doc = new jsPDF();
+                    
+                    doc.addFileToVFS(fontFileName, loadedFontBase64);
+                    doc.addFont(fontFileName, 'NotoSansTC', 'normal');
+                    doc.setFont('NotoSansTC');
+
+                    const pageHeight = doc.internal.pageSize.height;
+                    const pageWidth = doc.internal.pageSize.width;
+                    const margin = 20;
+                    doc.setFontSize(20);
+                    doc.text(template.title, pageWidth / 2, margin, { align: 'center' });
+                    doc.setFontSize(12);
+                    const lines = doc.splitTextToSize(finalContent, pageWidth - margin * 2);
+                    doc.text(lines, margin, margin + 15);
+                    
+                    doc.save(template.filename);
+                    // 加入一個短暫延遲，讓使用者體驗更好
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
+            } catch (error) {
+                console.error("PDF 產生失敗:", error);
+                messageBox.textContent = `產生 PDF 失敗: ${error.message}。請確認字體檔案 '${fontFileName}' 已上傳至專案根目錄。`;
+                messageBox.className = 'mb-4 p-3 text-center rounded-lg bg-red-100 text-red-700';
+            } finally {
+                allButtons.forEach(button => button.disabled = false);
+                downloadAllButton.innerHTML = originalButtonText;
             }
         }
     </script>
