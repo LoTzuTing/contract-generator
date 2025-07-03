@@ -61,6 +61,8 @@
         
         // 用一個變數來快取字體資料，避免重複載入
         let loadedFontBase64 = null;
+        // **核心修正**：定義正確的字體檔名
+        const fontFileName = 'NotoSansTC-VariableFont_wght.ttf';
 
         const contractTemplates = {
             1: { title: "保密協議 (NDA)", filename: "Confidentiality_Agreement.pdf", content: `...` }, // 內容省略以保持簡潔
@@ -95,7 +97,7 @@
 薪資議定為每月新台幣 ___________ 元整，於次月五日前發放。
 第四條：合約期間
 本合約為不定期契約，自民國 ____ 年 __ 月 __ 日起生效。
-立合約書人：
+立協議書人：
 甲方：____________________
 乙方：{{NAME}}
 日期：____________________
@@ -113,7 +115,7 @@
 每月租金為新台幣 ___________ 元整，乙方應於每月五日前支付予甲方。
 第四條：押金
 乙方應於簽約時支付甲方新台幣 ___________ 元整作為押金。
-立合約書人：
+立協議書人：
 甲方：____________________
 乙方：{{NAME}}
 日期：____________________
@@ -159,10 +161,11 @@
             `;
 
             try {
-                // --- 核心變更：在需要時才載入字體 ---
+                // 在需要時才載入字體
                 if (!loadedFontBase64) {
                     clickedButton.querySelector('span').textContent = '首次載入字體...';
-                    const response = await fetch('NotoSansTC-Regular.ttf');
+                    // **核心修正**：使用正確的字體檔名來抓取檔案
+                    const response = await fetch(`./${fontFileName}`);
                     if (!response.ok) {
                         throw new Error(`無法載入字體檔案 (HTTP ${response.status})`);
                     }
@@ -174,8 +177,9 @@
                 const finalContent = template.content.replace(/{{NAME}}/g, name);
                 const doc = new jsPDF();
                 
-                doc.addFileToVFS('NotoSansTC-Regular.ttf', loadedFontBase64);
-                doc.addFont('NotoSansTC-Regular.ttf', 'NotoSansTC', 'normal');
+                // **核心修正**：在 PDF 中註冊字體時，也使用正確的檔名
+                doc.addFileToVFS(fontFileName, loadedFontBase64);
+                doc.addFont(fontFileName, 'NotoSansTC', 'normal');
                 doc.setFont('NotoSansTC');
 
                 const pageHeight = doc.internal.pageSize.height;
@@ -195,7 +199,7 @@
 
             } catch (error) {
                 console.error("PDF 產生失敗:", error);
-                messageBox.textContent = `產生 PDF 失敗: ${error.message}。請確認字體檔案 'NotoSansTC-Regular.ttf' 已上傳至專案根目錄。`;
+                messageBox.textContent = `產生 PDF 失敗: ${error.message}。請確認字體檔案 '${fontFileName}' 已上傳至專案根目錄。`;
                 messageBox.className = 'mb-4 p-3 text-center rounded-lg bg-red-100 text-red-700';
             } finally {
                 contractButtons.forEach(button => button.disabled = false);
