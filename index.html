@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>合約產生器 (登入權限管理初版)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>合約產生器 (客戶資料歸檔版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
@@ -72,25 +71,32 @@
 
             <div class="space-y-6">
                 <div>
-                    <label for="name-input" class="block text-lg font-medium text-gray-700 mb-2">簽署人姓名</label>
+                    <label for="name-input" class="block text-lg font-medium text-gray-700 mb-2">客戶姓名</label>
                     <input type="text" id="name-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="請在此輸入姓名...">
                 </div>
                 <div>
-                    <label for="phone-input" class="block text-lg font-medium text-gray-700 mb-2">連絡電話</label>
+                    <label for="phone-input" class="block text-lg font-medium text-gray-700 mb-2">客戶電話</label>
                     <input type="tel" id="phone-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="請在此輸入連絡電話...">
                 </div>
+            </div>
+            
+            <!-- 新增「儲存客戶資料」按鈕 -->
+            <div class="mt-6">
+                <button id="save-customer-btn" class="w-full bg-cyan-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500">儲存客戶資料</button>
             </div>
 
             <div id="message-box" class="hidden my-6 p-3 text-center rounded-lg"></div>
 
-            <div class="mt-6 border-t pt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <button onclick="generateContract(1, this)" class="contract-btn w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700">產生「保密協議」</button>
-                <button onclick="generateContract(2, this)" class="contract-btn w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700">產生「勞動合約」</button>
-                <button onclick="generateContract(3, this)" class="contract-btn w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700">產生「租賃合約」</button>
-            </div>
-            
-            <div class="mt-4 border-t pt-4">
-                 <button onclick="generateAllContracts()" id="download-all-btn" class="contract-btn w-full bg-gray-700 text-white font-bold py-3 px-4 rounded-lg hover:bg-gray-800">一次下載全部</button>
+            <div class="mt-6 border-t pt-6">
+                <h2 class="text-lg font-semibold text-gray-700 mb-4 text-center">產生合約 PDF</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button onclick="generateContract(1, this)" class="contract-btn w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700">產生「保密協議」</button>
+                    <button onclick="generateContract(2, this)" class="contract-btn w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700">產生「勞動合約」</button>
+                    <button onclick="generateContract(3, this)" class="contract-btn w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700">產生「租賃合約」</button>
+                </div>
+                <div class="mt-4 border-t pt-4">
+                     <button onclick="generateAllContracts()" id="download-all-btn" class="contract-btn w-full bg-gray-700 text-white font-bold py-3 px-4 rounded-lg hover:bg-gray-800">一次下載全部</button>
+                </div>
             </div>
         </div>
         
@@ -100,12 +106,11 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, updateDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
         const { jsPDF } = window.jspdf;
 
         try {
-            // For Firebase JS SDK v7.20.0 and later, measurementId is optional
             const firebaseConfig = {
               apiKey: "AIzaSyAJqT5rNQNe_sJRpX4kirrTlLib69Jyyfo",
               authDomain: "contract-generator-service.firebaseapp.com",
@@ -119,19 +124,20 @@
             const app = initializeApp(firebaseConfig);
             const auth = getAuth(app);
             const db = getFirestore(app);
-
+            
             const authContainer = document.getElementById('auth-container');
             const appContainer = document.getElementById('app-container');
             const changePasswordContainer = document.getElementById('change-password-container');
             
-            const loginBtn = document.getElementById('login-btn');
-            const logoutBtn = document.getElementById('logout-btn');
-            const updatePasswordBtn = document.getElementById('update-password-btn');
-
-            const userEmailEl = document.getElementById('user-email');
-            const subscriptionStatusEl = document.getElementById('subscription-status');
-            const authErrorEl = document.getElementById('auth-error');
-            const passwordErrorEl = document.getElementById('password-error');
+            function showAuthError(message) {
+                const authErrorEl = document.getElementById('auth-error');
+                switch(message) {
+                    case "Firebase: Error (auth/wrong-password).": authErrorEl.textContent = "密碼錯誤，請重新輸入。"; break;
+                    case "Firebase: Error (auth/user-not-found).": authErrorEl.textContent = "找不到此電子郵件對應的帳號。"; break;
+                    default: authErrorEl.textContent = "登入失敗，請確認帳號密碼。";
+                }
+                authErrorEl.classList.remove('hidden');
+            }
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
@@ -142,24 +148,45 @@
                         authContainer.classList.add('hidden');
                         appContainer.classList.add('hidden');
                         changePasswordContainer.classList.remove('hidden');
+                        
+                        document.getElementById('update-password-btn').onclick = async () => {
+                            const newPassword = document.getElementById('new-password').value;
+                            const confirmPassword = document.getElementById('confirm-password').value;
+                            const passwordErrorEl = document.getElementById('password-error');
+                            passwordErrorEl.classList.add('hidden');
+
+                            if (newPassword.length < 6) { passwordErrorEl.textContent = '新密碼長度應至少為 6 個字元。'; passwordErrorEl.classList.remove('hidden'); return; }
+                            if (newPassword !== confirmPassword) { passwordErrorEl.textContent = '兩次輸入的密碼不一致。'; passwordErrorEl.classList.remove('hidden'); return; }
+                            
+                            try {
+                                await updatePassword(user, newPassword);
+                                const userDocRef = doc(db, "users", user.uid);
+                                await updateDoc(userDocRef, { passwordChangeRequired: false });
+                                window.location.reload();
+                            } catch (error) { console.error("密碼更新失敗:", error); passwordErrorEl.textContent = '密碼更新失敗，請稍後再試。'; passwordErrorEl.classList.remove('hidden'); }
+                        };
+
                     } else if (userDocSnap.exists()) {
                         authContainer.classList.add('hidden');
                         changePasswordContainer.classList.add('hidden');
                         appContainer.classList.remove('hidden');
-                        userEmailEl.textContent = `歡迎, ${user.email}`;
                         
+                        document.getElementById('user-email').textContent = `歡迎, ${user.email}`;
+                        document.getElementById('logout-btn').onclick = () => signOut(auth);
+
                         const userData = userDocSnap.data();
                         const subEndDate = userData.subscriptionEndDate.toDate();
                         const now = new Date();
+                        const subscriptionStatusEl = document.getElementById('subscription-status');
                         
                         if (now > subEndDate) {
                             subscriptionStatusEl.textContent = `您的訂閱已於 ${subEndDate.toLocaleDateString()} 到期。`;
                             subscriptionStatusEl.className = 'mb-6 p-3 text-center rounded-md bg-red-100 text-red-700';
-                            document.querySelectorAll('.contract-btn').forEach(btn => btn.disabled = true);
+                            document.querySelectorAll('.contract-btn, #save-customer-btn').forEach(btn => btn.disabled = true);
                         } else {
                             subscriptionStatusEl.textContent = `您的訂閱將於 ${subEndDate.toLocaleDateString()} 到期。`;
                             subscriptionStatusEl.className = 'mb-6 p-3 text-center rounded-md bg-green-100 text-green-700';
-                            document.querySelectorAll('.contract-btn').forEach(btn => btn.disabled = false);
+                            document.querySelectorAll('.contract-btn, #save-customer-btn').forEach(btn => btn.disabled = false);
                         }
                     } else {
                         await signOut(auth);
@@ -168,100 +195,95 @@
                     authContainer.classList.remove('hidden');
                     appContainer.classList.add('hidden');
                     changePasswordContainer.classList.add('hidden');
+
+                    document.getElementById('login-btn').onclick = async () => {
+                        const email = document.getElementById('email').value;
+                        const password = document.getElementById('password').value;
+                        document.getElementById('auth-error').classList.add('hidden');
+                        try { 
+                            await signInWithEmailAndPassword(auth, email, password);
+                        } catch (error) { 
+                            console.error("登入失敗:", error.message); 
+                            showAuthError(error.message); 
+                        }
+                    };
                 }
             });
 
-            function showAuthError(message) {
-                switch(message) {
-                    case "Firebase: Error (auth/wrong-password).":
-                        authErrorEl.textContent = "密碼錯誤，請重新輸入。"; break;
-                    case "Firebase: Error (auth/user-not-found).":
-                        authErrorEl.textContent = "找不到此電子郵件對應的帳號。"; break;
-                    default:
-                        authErrorEl.textContent = "登入失敗，請確認帳號密碼。";
-                }
-                authErrorEl.classList.remove('hidden');
-            }
-
-            loginBtn.addEventListener('click', async () => {
-                const email = document.getElementById('email').value;
-                const password = document.getElementById('password').value;
-                authErrorEl.classList.add('hidden');
-                try {
-                    await signInWithEmailAndPassword(auth, email, password);
-                } catch (error) {
-                    console.error("登入失敗:", error.message);
-                    showAuthError(error.message);
-                }
-            });
-
-            updatePasswordBtn.addEventListener('click', async () => {
-                const newPassword = document.getElementById('new-password').value;
-                const confirmPassword = document.getElementById('confirm-password').value;
-                passwordErrorEl.classList.add('hidden');
-
-                if (newPassword.length < 6) {
-                    passwordErrorEl.textContent = '新密碼長度應至少為 6 個字元。';
-                    passwordErrorEl.classList.remove('hidden');
-                    return;
-                }
-                if (newPassword !== confirmPassword) {
-                    passwordErrorEl.textContent = '兩次輸入的密碼不一致。';
-                    passwordErrorEl.classList.remove('hidden');
+            // 新增：儲存客戶資料的函式
+            document.getElementById('save-customer-btn').addEventListener('click', async () => {
+                const messageBox = document.getElementById('message-box');
+                const user = auth.currentUser;
+                
+                if (!user) {
+                    messageBox.textContent = '錯誤：您似乎已登出，請重新整理頁面。';
+                    messageBox.className = 'my-6 p-3 text-center rounded-lg bg-red-100 text-red-700';
                     return;
                 }
 
+                const { name, phone } = getFormValues();
+                if (!name || !phone) {
+                    messageBox.textContent = '請填寫客戶姓名及電話！';
+                    messageBox.className = 'my-6 p-3 text-center rounded-lg bg-red-100 text-red-700';
+                    return;
+                }
+                
                 try {
-                    const user = auth.currentUser;
-                    await updatePassword(user, newPassword);
-                    const userDocRef = doc(db, "users", user.uid);
-                    await updateDoc(userDocRef, { passwordChangeRequired: false });
-                    window.location.reload();
+                    const customerData = {
+                        customerName: name,
+                        customerPhone: phone,
+                        createdBy: user.uid,
+                        createdAt: serverTimestamp()
+                    };
+                    
+                    const customersCollectionRef = collection(db, 'customers');
+                    await addDoc(customersCollectionRef, customerData);
+                    
+                    messageBox.textContent = '客戶資料已成功儲存！';
+                    messageBox.className = 'my-6 p-3 text-center rounded-lg bg-green-100 text-green-700';
+
+                    // 清空輸入框
+                    document.getElementById('name-input').value = '';
+                    document.getElementById('phone-input').value = '';
+
                 } catch (error) {
-                    console.error("密碼更新失敗:", error);
-                    passwordErrorEl.textContent = '密碼更新失敗，請稍後再試。';
-                    passwordErrorEl.classList.remove('hidden');
+                    console.error("儲存客戶資料失敗:", error);
+                    messageBox.textContent = `儲存失敗: ${error.message}`;
+                    messageBox.className = 'my-6 p-3 text-center rounded-lg bg-red-100 text-red-700';
                 }
             });
 
-            logoutBtn.addEventListener('click', () => signOut(auth));
 
         } catch (error) {
             console.error("Firebase 初始化失敗:", error);
             document.getElementById('main-container').innerHTML = `<div class="p-4 text-center bg-red-100 text-red-800 rounded-lg"><h3 class="font-bold">應用程式載入失敗</h3><p class="mt-2 text-sm">無法初始化 Firebase。請檢查瀏覽器主控台 (按 F12) 以獲取詳細錯誤訊息，並確認您的 Firebase 設定碼 (firebaseConfig) 是否已正確貼上。</p></div>`;
         }
 
-        // --- 以下為合約產生器既有程式碼 ---
-        
-        // **核心修正**：恢復從外部檔案讀取字體
+        // --- 合約產生器既有程式碼 ---
+        const fontFileName = 'NotoSansTC-Regular.ttf';
         let loadedFontBase64 = null;
-        const fontFileName = 'NotoSansTC-VariableFont_wght.ttf';
-
         const contractTemplates = {
            1: { title: "保密協議 (NDA)", filename: "Confidentiality_Agreement.pdf", content: `立協議書人：甲方（揭露方）與乙方 ({{NAME}})（收受方）\n連絡電話：{{PHONE}}\n\n茲因甲方擬向乙方揭露其擁有之機密資訊，為確保甲方之機密資訊不致外洩，雙方爰同意訂定下列條款，以資共同遵守：\n第一條：機密資訊\n本協議所稱之「機密資訊」，係指甲方以口頭或書面方式標示為「機密」或「限閱」等類似字樣，或依其性質應認定為機密之任何商業、技術、財務、產品或營運等相關資訊。\n第二條：保密義務\n乙方同意，對於自甲方收受之任何機密資訊，均應以善良管理人之注意義務妥善保管，除為執行雙方合作業務之目的外，不得洩漏或交付予任何第三人。\n第三條：協議期限\n本協議自簽署之日起生效，有效期間為五年。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` },
            2: { title: "勞動合約", filename: "Employment_Contract.pdf", content: `立合約書人：\n甲方（雇主）：____________________\n乙方（勞工）：{{NAME}}\n連絡電話：{{PHONE}}\n\n茲為聘僱事宜，經雙方同意訂立勞動契約，條款如下：\n第一條：職務\n甲方聘僱乙方擔任 ___________ 職務。\n第二條：工作地點\n乙方之工作地點為 ____________________。\n第三條：薪資\n薪資議定為每月新台幣 ___________ 元整，於次月五日前發放。\n第四條：合約期間\n本合約為不定期契約，自民國 ____ 年 __ 月 __ 日起生效。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` },
            3: { title: "房屋租賃合約", filename: "Rental_Agreement.pdf", content: `立合約書人：\n出租人（以下簡稱甲方）：____________________\n承租人（以下簡稱乙方）：{{NAME}}\n連絡電話：{{PHONE}}\n\n茲為房屋租賃事宜，雙方同意訂立本契約，條款如下：\n第一條：租賃標的\n房屋座落於 ____________________。\n第二條：租賃期間\n自民國 ____ 年 __ 月 __ 日起至民國 ____ 年 __ 月 __ 日止。\n第三條：租金\n每月租金為新台幣 ___________ 元整，乙方應於每月五日前支付予甲方。\n第四條：押金\n乙方應於簽約時支付甲方新台幣 ___________ 元整作為押金。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` }
        };
         
-        function arrayBufferToBase64(buffer) {
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) { binary += String.fromCharCode(bytes[i]); }
-            return window.btoa(binary);
-        }
-
         async function loadFont() {
             if (loadedFontBase64) return;
             const response = await fetch(`./${fontFileName}`);
-            if (!response.ok) {
-                throw new Error(`無法載入字體檔案 '${fontFileName}' (HTTP ${response.status})`);
-            }
+            if (!response.ok) throw new Error(`無法載入字體檔案 '${fontFileName}' (HTTP ${response.status})`);
             const fontBuffer = await response.arrayBuffer();
-            loadedFontBase64 = arrayBufferToBase64(fontBuffer);
+            const bytes = new Uint8Array(fontBuffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) { binary += String.fromCharCode(bytes[i]); }
+            loadedFontBase64 = window.btoa(binary);
         }
 
-        function getFormValues() { const name = document.getElementById('name-input').value.trim(); const phone = document.getElementById('phone-input').value.trim(); return { name, phone }; }
+        function getFormValues() { 
+            const name = document.getElementById('name-input').value.trim(); 
+            const phone = document.getElementById('phone-input').value.trim(); 
+            return { name, phone };
+        }
         
         async function processPDFGeneration(logic, button) {
             const messageBox = document.getElementById('message-box');
@@ -306,7 +328,8 @@
                 doc.setFont('NotoSansTC');
                 const margin = 20, pageWidth = doc.internal.pageSize.width;
                 doc.setFontSize(20).text(template.title, pageWidth / 2, margin, { align: 'center' });
-                doc.setFontSize(12).text(doc.splitTextToSize(finalContent, pageWidth - margin * 2), margin, margin + 15);
+                const textLines = doc.splitTextToSize(finalContent, pageWidth - margin * 2);
+                doc.setFontSize(12).text(textLines, margin, margin + 15);
                 doc.save(template.filename);
             }, clickedButton);
         };
@@ -323,7 +346,8 @@
                     doc.setFont('NotoSansTC');
                     const margin = 20, pageWidth = doc.internal.pageSize.width;
                     doc.setFontSize(20).text(template.title, pageWidth / 2, margin, { align: 'center' });
-                    doc.setFontSize(12).text(doc.splitTextToSize(finalContent, pageWidth - margin * 2), margin, margin + 15);
+                    const textLines = doc.splitTextToSize(finalContent, pageWidth - margin * 2);
+                    doc.setFontSize(12).text(textLines, margin, margin + 15);
                     doc.save(template.filename);
                     await new Promise(resolve => setTimeout(resolve, 500));
                 }
