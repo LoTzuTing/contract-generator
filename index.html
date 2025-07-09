@@ -1,285 +1,334 @@
+
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>合約產生器 (新增全部下載)</title>
-    <!-- 引入 Tailwind CSS 方便快速美化頁面 -->
+    <title>合約產生器 (登入權限管理初版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 jsPDF 函式庫，這是生成 PDF 的核心工具 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <!-- 不再需要任何外部字體 JS 檔案 -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Noto Sans TC', sans-serif;
-        }
-        button:disabled {
-            cursor: not-allowed;
-        }
+        body { font-family: 'Noto Sans TC', sans-serif; }
+        button:disabled { cursor: not-allowed; opacity: 0.6; }
+        .hidden { display: none; }
     </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen py-8">
 
-    <div class="bg-white p-6 md:p-8 rounded-xl shadow-lg w-full max-w-2xl mx-4">
+    <!-- 主容器 -->
+    <div id="main-container" class="bg-white p-6 md:p-8 rounded-xl shadow-lg w-full max-w-2xl mx-4">
+
+        <!-- 登入畫面 -->
+        <div id="auth-container">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800 text-center mb-6">客戶登入</h1>
+            <div class="space-y-4">
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700">電子郵件</label>
+                    <input type="email" id="email" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700">密碼</label>
+                    <input type="password" id="password" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+            <div id="auth-error" class="hidden my-4 p-3 text-center rounded-md bg-red-100 text-red-700"></div>
+            <div class="mt-6">
+                <button id="login-btn" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">登入</button>
+            </div>
+        </div>
+
+        <!-- 首次登入變更密碼畫面 -->
+        <div id="change-password-container" class="hidden">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800 text-center mb-6">首次登入，請設定新密碼</h1>
+             <div class="space-y-4">
+                <div>
+                    <label for="new-password" class="block text-sm font-medium text-gray-700">新密碼 (至少6位數)</label>
+                    <input type="password" id="new-password" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="confirm-password" class="block text-sm font-medium text-gray-700">確認新密碼</label>
+                    <input type="password" id="confirm-password" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+            <div id="password-error" class="hidden my-4 p-3 text-center rounded-md bg-red-100 text-red-700"></div>
+            <div class="mt-6">
+                <button id="update-password-btn" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">更新密碼並繼續</button>
+            </div>
+        </div>
+
+
+        <!-- 合約產生器應用程式 -->
+        <div id="app-container" class="hidden">
+            <header class="flex justify-between items-center mb-6 pb-4 border-b">
+                <div>
+                    <h1 class="text-xl md:text-2xl font-bold text-gray-800">簡易合約產生器</h1>
+                    <p id="user-email" class="text-sm text-gray-500"></p>
+                </div>
+                <button id="logout-btn" class="bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600">登出</button>
+            </header>
+            
+            <div id="subscription-status" class="mb-6 p-3 text-center rounded-md"></div>
+
+            <div class="space-y-6">
+                <div>
+                    <label for="name-input" class="block text-lg font-medium text-gray-700 mb-2">簽署人姓名</label>
+                    <input type="text" id="name-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="請在此輸入姓名...">
+                </div>
+                <div>
+                    <label for="phone-input" class="block text-lg font-medium text-gray-700 mb-2">連絡電話</label>
+                    <input type="tel" id="phone-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="請在此輸入連絡電話...">
+                </div>
+            </div>
+
+            <div id="message-box" class="hidden my-6 p-3 text-center rounded-lg"></div>
+
+            <div class="mt-6 border-t pt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button onclick="generateContract(1, this)" class="contract-btn w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700">產生「保密協議」</button>
+                <button onclick="generateContract(2, this)" class="contract-btn w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700">產生「勞動合約」</button>
+                <button onclick="generateContract(3, this)" class="contract-btn w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700">產生「租賃合約」</button>
+            </div>
+            
+            <div class="mt-4 border-t pt-4">
+                 <button onclick="generateAllContracts()" id="download-all-btn" class="contract-btn w-full bg-gray-700 text-white font-bold py-3 px-4 rounded-lg hover:bg-gray-800">一次下載全部</button>
+            </div>
+        </div>
         
-        <div class="mb-8 text-center">
-            <!-- 行動裝置優化：在小螢幕上標題字體略小 -->
-            <h1 class="text-2xl md:text-3xl font-bold text-gray-800">簡易合約產生器</h1>
-            <p class="text-gray-500 mt-2">輸入名稱，即可快速生成合約</p>
-        </div>
-
-        <div class="mb-6">
-            <label for="name-input" class="block text-lg font-medium text-gray-700 mb-2">簽署人姓名</label>
-            <input type="text" id="name-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="請在此輸入姓名...">
-        </div>
-
-        <!-- 訊息提示框 -->
-        <div id="message-box" class="hidden mb-4 p-3 text-center rounded-lg"></div>
-
-        <!-- 按鈕 (Tailwind 的 grid 系統已自動處理響應式) -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button onclick="generateContract(1)" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105">
-                產生「保密協議」
-            </button>
-            <button onclick="generateContract(2)" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform transform hover:scale-105">
-                產生「勞動合約」
-            </button>
-            <button onclick="generateContract(3)" class="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-transform transform hover:scale-105">
-                產生「租賃合約」
-            </button>
-        </div>
-        
-        <!-- 新增「一次下載全部」按鈕 -->
-        <div class="mt-4 border-t pt-4">
-             <button onclick="generateAllContracts()" id="download-all-btn" class="w-full bg-gray-700 text-white font-bold py-3 px-4 rounded-lg hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105">
-                一次下載全部
-            </button>
-        </div>
-
-
-        <div class="mt-8 text-center text-sm text-gray-400">
-            <p>&copy; 2025 簡易合約產生器. All Rights Reserved.</p>
-        </div>
     </div>
 
-    <script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+
         const { jsPDF } = window.jspdf;
+
+        try {
+            // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+            const firebaseConfig = {
+              apiKey: "AIzaSyAJqT5rNQNe_sJRpX4kirrTlLib69Jyyfo",
+              authDomain: "contract-generator-service.firebaseapp.com",
+              projectId: "contract-generator-service",
+              storageBucket: "contract-generator-service.firebasestorage.app",
+              messagingSenderId: "835758581742",
+              appId: "1:835758581742:web:2639bc58c3e234ddfd10ff",
+              measurementId: "G-XSJ189FBS9"
+            };
+
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            const db = getFirestore(app);
+
+            const authContainer = document.getElementById('auth-container');
+            const appContainer = document.getElementById('app-container');
+            const changePasswordContainer = document.getElementById('change-password-container');
+            
+            const loginBtn = document.getElementById('login-btn');
+            const logoutBtn = document.getElementById('logout-btn');
+            const updatePasswordBtn = document.getElementById('update-password-btn');
+
+            const userEmailEl = document.getElementById('user-email');
+            const subscriptionStatusEl = document.getElementById('subscription-status');
+            const authErrorEl = document.getElementById('auth-error');
+            const passwordErrorEl = document.getElementById('password-error');
+
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    const userDocRef = doc(db, "users", user.uid);
+                    const userDocSnap = await getDoc(userDocRef);
+
+                    if (userDocSnap.exists() && userDocSnap.data().passwordChangeRequired === true) {
+                        authContainer.classList.add('hidden');
+                        appContainer.classList.add('hidden');
+                        changePasswordContainer.classList.remove('hidden');
+                    } else if (userDocSnap.exists()) {
+                        authContainer.classList.add('hidden');
+                        changePasswordContainer.classList.add('hidden');
+                        appContainer.classList.remove('hidden');
+                        userEmailEl.textContent = `歡迎, ${user.email}`;
+                        
+                        const userData = userDocSnap.data();
+                        const subEndDate = userData.subscriptionEndDate.toDate();
+                        const now = new Date();
+                        
+                        if (now > subEndDate) {
+                            subscriptionStatusEl.textContent = `您的訂閱已於 ${subEndDate.toLocaleDateString()} 到期。`;
+                            subscriptionStatusEl.className = 'mb-6 p-3 text-center rounded-md bg-red-100 text-red-700';
+                            document.querySelectorAll('.contract-btn').forEach(btn => btn.disabled = true);
+                        } else {
+                            subscriptionStatusEl.textContent = `您的訂閱將於 ${subEndDate.toLocaleDateString()} 到期。`;
+                            subscriptionStatusEl.className = 'mb-6 p-3 text-center rounded-md bg-green-100 text-green-700';
+                            document.querySelectorAll('.contract-btn').forEach(btn => btn.disabled = false);
+                        }
+                    } else {
+                        await signOut(auth);
+                    }
+                } else {
+                    authContainer.classList.remove('hidden');
+                    appContainer.classList.add('hidden');
+                    changePasswordContainer.classList.add('hidden');
+                }
+            });
+
+            function showAuthError(message) {
+                switch(message) {
+                    case "Firebase: Error (auth/wrong-password).":
+                        authErrorEl.textContent = "密碼錯誤，請重新輸入。"; break;
+                    case "Firebase: Error (auth/user-not-found).":
+                        authErrorEl.textContent = "找不到此電子郵件對應的帳號。"; break;
+                    default:
+                        authErrorEl.textContent = "登入失敗，請確認帳號密碼。";
+                }
+                authErrorEl.classList.remove('hidden');
+            }
+
+            loginBtn.addEventListener('click', async () => {
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                authErrorEl.classList.add('hidden');
+                try {
+                    await signInWithEmailAndPassword(auth, email, password);
+                } catch (error) {
+                    console.error("登入失敗:", error.message);
+                    showAuthError(error.message);
+                }
+            });
+
+            updatePasswordBtn.addEventListener('click', async () => {
+                const newPassword = document.getElementById('new-password').value;
+                const confirmPassword = document.getElementById('confirm-password').value;
+                passwordErrorEl.classList.add('hidden');
+
+                if (newPassword.length < 6) {
+                    passwordErrorEl.textContent = '新密碼長度應至少為 6 個字元。';
+                    passwordErrorEl.classList.remove('hidden');
+                    return;
+                }
+                if (newPassword !== confirmPassword) {
+                    passwordErrorEl.textContent = '兩次輸入的密碼不一致。';
+                    passwordErrorEl.classList.remove('hidden');
+                    return;
+                }
+
+                try {
+                    const user = auth.currentUser;
+                    await updatePassword(user, newPassword);
+                    const userDocRef = doc(db, "users", user.uid);
+                    await updateDoc(userDocRef, { passwordChangeRequired: false });
+                    window.location.reload();
+                } catch (error) {
+                    console.error("密碼更新失敗:", error);
+                    passwordErrorEl.textContent = '密碼更新失敗，請稍後再試。';
+                    passwordErrorEl.classList.remove('hidden');
+                }
+            });
+
+            logoutBtn.addEventListener('click', () => signOut(auth));
+
+        } catch (error) {
+            console.error("Firebase 初始化失敗:", error);
+            document.getElementById('main-container').innerHTML = `<div class="p-4 text-center bg-red-100 text-red-800 rounded-lg"><h3 class="font-bold">應用程式載入失敗</h3><p class="mt-2 text-sm">無法初始化 Firebase。請檢查瀏覽器主控台 (按 F12) 以獲取詳細錯誤訊息，並確認您的 Firebase 設定碼 (firebaseConfig) 是否已正確貼上。</p></div>`;
+        }
+
+        // --- 以下為合約產生器既有程式碼 ---
         
+        // **核心修正**：恢復從外部檔案讀取字體
         let loadedFontBase64 = null;
         const fontFileName = 'NotoSansTC-VariableFont_wght.ttf';
 
         const contractTemplates = {
-            1: { title: "保密協議 (NDA)", filename: "Confidentiality_Agreement.pdf", content: `...` },
-            2: { title: "勞動合約", filename: "Employment_Contract.pdf", content: `...` },
-            3: { title: "房屋租賃合約", filename: "Rental_Agreement.pdf", content: `...` }
-        };
-        contractTemplates[1].content = `
-立協議書人：甲方（揭露方）與乙方 ({{NAME}})（收受方）
-茲因甲方擬向乙方揭露其擁有之機密資訊，為確保甲方之機密資訊不致外洩，雙方爰同意訂定下列條款，以資共同遵守：
-第一條：機密資訊
-本協議所稱之「機密資訊」，係指甲方以口頭或書面方式標示為「機密」或「限閱」等類似字樣，或依其性質應認定為機密之任何商業、技術、財務、產品或營運等相關資訊。
-第二條：保密義務
-乙方同意，對於自甲方收受之任何機密資訊，均應以善良管理人之注意義務妥善保管，除為執行雙方合作業務之目的外，不得洩漏或交付予任何第三人。
-第三條：協議期限
-本協議自簽署之日起生效，有效期間為五年。
-立協議書人：
-甲方：____________________
-乙方：{{NAME}}
-日期：____________________
-`;
-        contractTemplates[2].content = `
-立合約書人：
-甲方（雇主）：____________________
-乙方（勞工）：{{NAME}}
-茲為聘僱事宜，經雙方同意訂立勞動契約，條款如下：
-第一條：職務
-甲方聘僱乙方擔任 ___________ 職務。
-第二條：工作地點
-乙方之工作地點為 ____________________。
-第三條：薪資
-薪資議定為每月新台幣 ___________ 元整，於次月五日前發放。
-第四條：合約期間
-本合約為不定期契約，自民國 ____ 年 __ 月 __ 日起生效。
-立協議書人：
-甲方：____________________
-乙方：{{NAME}}
-日期：____________________
-`;
-        contractTemplates[3].content = `
-立合約書人：
-出租人（以下簡稱甲方）：____________________
-承租人（以下簡稱乙方）：{{NAME}}
-茲為房屋租賃事宜，雙方同意訂立本契約，條款如下：
-第一條：租賃標的
-房屋座落於 ____________________。
-第二條：租賃期間
-自民國 ____ 年 __ 月 __ 日起至民國 ____ 年 __ 月 __ 日止。
-第三條：租金
-每月租金為新台幣 ___________ 元整，乙方應於每月五日前支付予甲方。
-第四條：押金
-乙方應於簽約時支付甲方新台幣 ___________ 元整作為押金。
-立協議書人：
-甲方：____________________
-乙方：{{NAME}}
-日期：____________________
-`;
-
+           1: { title: "保密協議 (NDA)", filename: "Confidentiality_Agreement.pdf", content: `立協議書人：甲方（揭露方）與乙方 ({{NAME}})（收受方）\n連絡電話：{{PHONE}}\n\n茲因甲方擬向乙方揭露其擁有之機密資訊，為確保甲方之機密資訊不致外洩，雙方爰同意訂定下列條款，以資共同遵守：\n第一條：機密資訊\n本協議所稱之「機密資訊」，係指甲方以口頭或書面方式標示為「機密」或「限閱」等類似字樣，或依其性質應認定為機密之任何商業、技術、財務、產品或營運等相關資訊。\n第二條：保密義務\n乙方同意，對於自甲方收受之任何機密資訊，均應以善良管理人之注意義務妥善保管，除為執行雙方合作業務之目的外，不得洩漏或交付予任何第三人。\n第三條：協議期限\n本協議自簽署之日起生效，有效期間為五年。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` },
+           2: { title: "勞動合約", filename: "Employment_Contract.pdf", content: `立合約書人：\n甲方（雇主）：____________________\n乙方（勞工）：{{NAME}}\n連絡電話：{{PHONE}}\n\n茲為聘僱事宜，經雙方同意訂立勞動契約，條款如下：\n第一條：職務\n甲方聘僱乙方擔任 ___________ 職務。\n第二條：工作地點\n乙方之工作地點為 ____________________。\n第三條：薪資\n薪資議定為每月新台幣 ___________ 元整，於次月五日前發放。\n第四條：合約期間\n本合約為不定期契約，自民國 ____ 年 __ 月 __ 日起生效。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` },
+           3: { title: "房屋租賃合約", filename: "Rental_Agreement.pdf", content: `立合約書人：\n出租人（以下簡稱甲方）：____________________\n承租人（以下簡稱乙方）：{{NAME}}\n連絡電話：{{PHONE}}\n\n茲為房屋租賃事宜，雙方同意訂立本契約，條款如下：\n第一條：租賃標的\n房屋座落於 ____________________。\n第二條：租賃期間\n自民國 ____ 年 __ 月 __ 日起至民國 ____ 年 __ 月 __ 日止。\n第三條：租金\n每月租金為新台幣 ___________ 元整，乙方應於每月五日前支付予甲方。\n第四條：押金\n乙方應於簽約時支付甲方新台幣 ___________ 元整作為押金。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` }
+       };
+        
         function arrayBufferToBase64(buffer) {
             let binary = '';
             const bytes = new Uint8Array(buffer);
             const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
+            for (let i = 0; i < len; i++) { binary += String.fromCharCode(bytes[i]); }
             return window.btoa(binary);
         }
 
-        async function loadFont(button) {
-             if (!loadedFontBase64) {
-                const originalText = button.innerHTML;
-                button.querySelector('span').textContent = '首次載入字體...';
-                try {
-                    const response = await fetch(`./${fontFileName}`);
-                    if (!response.ok) {
-                        throw new Error(`無法載入字體檔案 (HTTP ${response.status})`);
+        async function loadFont() {
+            if (loadedFontBase64) return;
+            const response = await fetch(`./${fontFileName}`);
+            if (!response.ok) {
+                throw new Error(`無法載入字體檔案 '${fontFileName}' (HTTP ${response.status})`);
+            }
+            const fontBuffer = await response.arrayBuffer();
+            loadedFontBase64 = arrayBufferToBase64(fontBuffer);
+        }
+
+        function getFormValues() { const name = document.getElementById('name-input').value.trim(); const phone = document.getElementById('phone-input').value.trim(); return { name, phone }; }
+        
+        async function processPDFGeneration(logic, button) {
+            const messageBox = document.getElementById('message-box');
+            const { name, phone } = getFormValues();
+            if (!name || !phone) {
+                messageBox.textContent = '請填寫所有欄位！';
+                messageBox.className = 'my-6 p-3 text-center rounded-lg bg-red-100 text-red-700';
+                return;
+            }
+            messageBox.classList.add('hidden');
+
+            const originalButtonText = button.innerHTML;
+            const allContractButtons = document.querySelectorAll('.contract-btn');
+            allContractButtons.forEach(btn => btn.disabled = true);
+            button.innerHTML = `<span class="flex items-center justify-center"><svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>處理中...</span>`;
+
+            try {
+                await loadFont();
+                await logic(name, phone);
+            } catch (error) {
+                console.error("PDF 產生失敗:", error);
+                messageBox.textContent = `產生 PDF 失敗: ${error.message}。`;
+                messageBox.className = 'my-6 p-3 text-center rounded-lg bg-red-100 text-red-700';
+            } finally {
+                allContractButtons.forEach(btn => {
+                    const subStatusEl = document.getElementById('subscription-status');
+                    if (!subStatusEl.className.includes('bg-red-100')) {
+                        btn.disabled = false;
                     }
-                    const fontBuffer = await response.arrayBuffer();
-                    loadedFontBase64 = arrayBufferToBase64(fontBuffer);
-                } finally {
-                    // 恢復按鈕文字，即使載入失敗
-                    button.innerHTML = originalText;
-                }
+                });
+                button.innerHTML = originalButtonText;
             }
         }
 
-        async function generateContract(type) {
-            const nameInput = document.getElementById('name-input');
-            const messageBox = document.getElementById('message-box');
-            const name = nameInput.value.trim();
-            const allButtons = document.querySelectorAll('button');
-            const clickedButton = allButtons[type - 1];
-
-            if (!name) {
-                messageBox.textContent = '請先輸入簽署人姓名！';
-                messageBox.className = 'mb-4 p-3 text-center rounded-lg bg-red-100 text-red-700';
-                return;
-            } else {
-                messageBox.classList.add('hidden');
-            }
-
-            const originalButtonText = clickedButton.innerHTML;
-            allButtons.forEach(button => button.disabled = true);
-            clickedButton.innerHTML = `
-                <span class="flex items-center justify-center">
-                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    處理中...
-                </span>
-            `;
-
-            try {
-                await loadFont(clickedButton);
-                
+        window.generateContract = (type, clickedButton) => {
+            processPDFGeneration((name, phone) => {
                 const template = contractTemplates[type];
-                const finalContent = template.content.replace(/{{NAME}}/g, name);
+                const finalContent = template.content.replace(/{{NAME}}/g, name).replace(/{{PHONE}}/g, phone);
                 const doc = new jsPDF();
-                
                 doc.addFileToVFS(fontFileName, loadedFontBase64);
                 doc.addFont(fontFileName, 'NotoSansTC', 'normal');
                 doc.setFont('NotoSansTC');
-
-                const pageHeight = doc.internal.pageSize.height;
-                const pageWidth = doc.internal.pageSize.width;
-                const margin = 20;
-                let y = margin;
-
-                doc.setFontSize(20);
-                doc.text(template.title, pageWidth / 2, y, { align: 'center' });
-                y += 15;
-
-                doc.setFontSize(12);
-                const lines = doc.splitTextToSize(finalContent, pageWidth - margin * 2);
-                doc.text(lines, margin, y);
-                
+                const margin = 20, pageWidth = doc.internal.pageSize.width;
+                doc.setFontSize(20).text(template.title, pageWidth / 2, margin, { align: 'center' });
+                doc.setFontSize(12).text(doc.splitTextToSize(finalContent, pageWidth - margin * 2), margin, margin + 15);
                 doc.save(template.filename);
+            }, clickedButton);
+        };
 
-            } catch (error) {
-                console.error("PDF 產生失敗:", error);
-                messageBox.textContent = `產生 PDF 失敗: ${error.message}。請確認字體檔案 '${fontFileName}' 已上傳至專案根目錄。`;
-                messageBox.className = 'mb-4 p-3 text-center rounded-lg bg-red-100 text-red-700';
-            } finally {
-                allButtons.forEach(button => button.disabled = false);
-                clickedButton.innerHTML = originalButtonText;
-            }
-        }
-        
-        async function generateAllContracts() {
-            const nameInput = document.getElementById('name-input');
-            const messageBox = document.getElementById('message-box');
-            const name = nameInput.value.trim();
-            const allButtons = document.querySelectorAll('button');
+        window.generateAllContracts = () => {
             const downloadAllButton = document.getElementById('download-all-btn');
-
-            if (!name) {
-                messageBox.textContent = '請先輸入簽署人姓名！';
-                messageBox.className = 'mb-4 p-3 text-center rounded-lg bg-red-100 text-red-700';
-                return;
-            } else {
-                messageBox.classList.add('hidden');
-            }
-
-            const originalButtonText = downloadAllButton.innerHTML;
-            allButtons.forEach(button => button.disabled = true);
-            downloadAllButton.innerHTML = `
-                <span class="flex items-center justify-center">
-                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    處理中...
-                </span>
-            `;
-
-            try {
-                await loadFont(downloadAllButton);
-
+            processPDFGeneration(async (name, phone) => {
                 for (const type in contractTemplates) {
                     const template = contractTemplates[type];
-                    const finalContent = template.content.replace(/{{NAME}}/g, name);
+                    const finalContent = template.content.replace(/{{NAME}}/g, name).replace(/{{PHONE}}/g, phone);
                     const doc = new jsPDF();
-                    
                     doc.addFileToVFS(fontFileName, loadedFontBase64);
                     doc.addFont(fontFileName, 'NotoSansTC', 'normal');
                     doc.setFont('NotoSansTC');
-
-                    const pageHeight = doc.internal.pageSize.height;
-                    const pageWidth = doc.internal.pageSize.width;
-                    const margin = 20;
-                    doc.setFontSize(20);
-                    doc.text(template.title, pageWidth / 2, margin, { align: 'center' });
-                    doc.setFontSize(12);
-                    const lines = doc.splitTextToSize(finalContent, pageWidth - margin * 2);
-                    doc.text(lines, margin, margin + 15);
-                    
+                    const margin = 20, pageWidth = doc.internal.pageSize.width;
+                    doc.setFontSize(20).text(template.title, pageWidth / 2, margin, { align: 'center' });
+                    doc.setFontSize(12).text(doc.splitTextToSize(finalContent, pageWidth - margin * 2), margin, margin + 15);
                     doc.save(template.filename);
-                    // 加入一個短暫延遲，讓使用者體驗更好
                     await new Promise(resolve => setTimeout(resolve, 500));
                 }
-
-            } catch (error) {
-                console.error("PDF 產生失敗:", error);
-                messageBox.textContent = `產生 PDF 失敗: ${error.message}。請確認字體檔案 '${fontFileName}' 已上傳至專案根目錄。`;
-                messageBox.className = 'mb-4 p-3 text-center rounded-lg bg-red-100 text-red-700';
-            } finally {
-                allButtons.forEach(button => button.disabled = false);
-                downloadAllButton.innerHTML = originalButtonText;
-            }
-        }
+            }, downloadAllButton);
+        };
     </script>
 </body>
 </html>
