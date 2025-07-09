@@ -80,9 +80,10 @@
                 </div>
             </div>
             
-            <!-- 新增「儲存客戶資料」按鈕 -->
-            <div class="mt-6">
-                <button id="save-customer-btn" class="w-full bg-cyan-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-cyan-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500">儲存客戶資料</button>
+            <!-- 功能按鈕區 -->
+            <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button id="save-customer-btn" class="w-full bg-cyan-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-cyan-700">儲存客戶資料</button>
+                <button id="load-customers-btn" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700">調閱客戶資料</button>
             </div>
 
             <div id="message-box" class="hidden my-6 p-3 text-center rounded-lg"></div>
@@ -102,11 +103,30 @@
         
     </div>
 
+    <!-- 客戶列表 Modal -->
+    <div id="customer-list-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-10 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex justify-between items-center pb-3 border-b">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">客戶列表</h3>
+                    <button id="close-customer-list-btn" class="text-2xl font-bold hover:text-red-500">&times;</button>
+                </div>
+                <div class="mt-4">
+                    <input type="text" id="customer-search-input" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="搜尋姓名或電話...">
+                    <div id="customer-list-container" class="mt-4 max-h-96 overflow-y-auto">
+                        <!-- 客戶資料將會被注入到這裡 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, updateDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, updateDoc, collection, addDoc, serverTimestamp, query, where, getDocs } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
         const { jsPDF } = window.jspdf;
 
@@ -182,11 +202,11 @@
                         if (now > subEndDate) {
                             subscriptionStatusEl.textContent = `您的訂閱已於 ${subEndDate.toLocaleDateString()} 到期。`;
                             subscriptionStatusEl.className = 'mb-6 p-3 text-center rounded-md bg-red-100 text-red-700';
-                            document.querySelectorAll('.contract-btn, #save-customer-btn').forEach(btn => btn.disabled = true);
+                            document.querySelectorAll('.contract-btn, #save-customer-btn, #load-customers-btn').forEach(btn => btn.disabled = true);
                         } else {
                             subscriptionStatusEl.textContent = `您的訂閱將於 ${subEndDate.toLocaleDateString()} 到期。`;
                             subscriptionStatusEl.className = 'mb-6 p-3 text-center rounded-md bg-green-100 text-green-700';
-                            document.querySelectorAll('.contract-btn, #save-customer-btn').forEach(btn => btn.disabled = false);
+                            document.querySelectorAll('.contract-btn, #save-customer-btn, #load-customers-btn').forEach(btn => btn.disabled = false);
                         }
                     } else {
                         await signOut(auth);
@@ -210,7 +230,7 @@
                 }
             });
 
-            // 新增：儲存客戶資料的函式
+            // 儲存客戶資料的函式
             document.getElementById('save-customer-btn').addEventListener('click', async () => {
                 const messageBox = document.getElementById('message-box');
                 const user = auth.currentUser;
@@ -242,7 +262,6 @@
                     messageBox.textContent = '客戶資料已成功儲存！';
                     messageBox.className = 'my-6 p-3 text-center rounded-lg bg-green-100 text-green-700';
 
-                    // 清空輸入框
                     document.getElementById('name-input').value = '';
                     document.getElementById('phone-input').value = '';
 
@@ -253,6 +272,104 @@
                 }
             });
 
+            // --- 調閱客戶資料邏輯 ---
+            const loadCustomersBtn = document.getElementById('load-customers-btn');
+            const customerListModal = document.getElementById('customer-list-modal');
+            const closeCustomerListBtn = document.getElementById('close-customer-list-btn');
+            const customerSearchInput = document.getElementById('customer-search-input');
+            const customerListContainer = document.getElementById('customer-list-container');
+            let allCustomers = [];
+
+            async function fetchCustomers() {
+                const user = auth.currentUser;
+                if (!user) return;
+
+                customerListContainer.innerHTML = '<p>載入中...</p>';
+                customerListModal.classList.remove('hidden');
+
+                try {
+                    const q = query(collection(db, "customers"), where("createdBy", "==", user.uid));
+                    const querySnapshot = await getDocs(q);
+                    
+                    allCustomers = [];
+                    querySnapshot.forEach((doc) => {
+                        allCustomers.push({ id: doc.id, ...doc.data() });
+                    });
+
+                    allCustomers.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
+
+                    displayCustomers(allCustomers);
+
+                } catch (error) {
+                    console.error("Error fetching customers: ", error);
+                    customerListContainer.innerHTML = '<p class="text-red-500">無法載入客戶資料。</p>';
+                }
+            }
+
+            function displayCustomers(customers) {
+                if (customers.length === 0) {
+                    customerListContainer.innerHTML = '<p>尚無客戶資料。</p>';
+                    return;
+                }
+
+                const table = document.createElement('table');
+                table.className = 'w-full text-left border-collapse';
+                table.innerHTML = `
+                    <thead>
+                        <tr>
+                            <th class="py-2 px-3 bg-gray-100 border-b">姓名</th>
+                            <th class="py-2 px-3 bg-gray-100 border-b">電話</th>
+                            <th class="py-2 px-3 bg-gray-100 border-b">建立日期</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                `;
+                const tbody = table.querySelector('tbody');
+
+                customers.forEach(customer => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-gray-50 cursor-pointer';
+                    
+                    const createdAtDate = customer.createdAt ? customer.createdAt.toDate().toLocaleDateString() : 'N/A';
+
+                    tr.innerHTML = `
+                        <td class="py-2 px-3 border-b">${customer.customerName}</td>
+                        <td class="py-2 px-3 border-b">${customer.customerPhone}</td>
+                        <td class="py-2 px-3 border-b">${createdAtDate}</td>
+                    `;
+
+                    tr.addEventListener('click', () => {
+                        document.getElementById('name-input').value = customer.customerName;
+                        document.getElementById('phone-input').value = customer.customerPhone;
+                        customerListModal.classList.add('hidden');
+                    });
+
+                    tbody.appendChild(tr);
+                });
+
+                customerListContainer.innerHTML = '';
+                customerListContainer.appendChild(table);
+            }
+
+            function filterCustomerList() {
+                const searchTerm = customerSearchInput.value.toLowerCase();
+                if (!searchTerm) {
+                    displayCustomers(allCustomers);
+                    return;
+                }
+
+                const filteredCustomers = allCustomers.filter(customer => {
+                    return customer.customerName.toLowerCase().includes(searchTerm) || 
+                           customer.customerPhone.includes(searchTerm);
+                });
+
+                displayCustomers(filteredCustomers);
+            }
+
+            loadCustomersBtn.addEventListener('click', fetchCustomers);
+            closeCustomerListBtn.addEventListener('click', () => customerListModal.classList.add('hidden'));
+            customerSearchInput.addEventListener('keyup', filterCustomerList);
+
 
         } catch (error) {
             console.error("Firebase 初始化失敗:", error);
@@ -260,7 +377,8 @@
         }
 
         // --- 合約產生器既有程式碼 ---
-        const fontFileName = 'NotoSansTC-Regular.ttf';
+        // **核心修正**：使用您指定且驗證過可行的字體檔名
+        const fontFileName = 'NotoSansTC-VariableFont_wght.ttf';
         let loadedFontBase64 = null;
         const contractTemplates = {
            1: { title: "保密協議 (NDA)", filename: "Confidentiality_Agreement.pdf", content: `立協議書人：甲方（揭露方）與乙方 ({{NAME}})（收受方）\n連絡電話：{{PHONE}}\n\n茲因甲方擬向乙方揭露其擁有之機密資訊，為確保甲方之機密資訊不致外洩，雙方爰同意訂定下列條款，以資共同遵守：\n第一條：機密資訊\n本協議所稱之「機密資訊」，係指甲方以口頭或書面方式標示為「機密」或「限閱」等類似字樣，或依其性質應認定為機密之任何商業、技術、財務、產品或營運等相關資訊。\n第二條：保密義務\n乙方同意，對於自甲方收受之任何機密資訊，均應以善良管理人之注意義務妥善保管，除為執行雙方合作業務之目的外，不得洩漏或交付予任何第三人。\n第三條：協議期限\n本協議自簽署之日起生效，有效期間為五年。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` },
