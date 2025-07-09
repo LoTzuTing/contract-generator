@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>合約產生器 (客戶資料歸檔版)</title>
+    <title>合約產生器 (功能整合穩定版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
@@ -78,10 +78,33 @@
                     <label for="phone-input" class="block text-lg font-medium text-gray-700 mb-2">客戶電話</label>
                     <input type="tel" id="phone-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="請在此輸入連絡電話...">
                 </div>
+                <div>
+                    <label for="address-input" class="block text-lg font-medium text-gray-700 mb-2">客戶地址</label>
+                    <input type="text" id="address-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="請在此輸入地址...">
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="channel-select" class="block text-lg font-medium text-gray-700 mb-2">通路 (方案)</label>
+                        <select id="channel-select" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
+                            <option value="0">請選擇通路</option>
+                            <option value="0.02">通路A (2%)</option>
+                            <option value="0.03">通路B (3%)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="amount-input" class="block text-lg font-medium text-gray-700 mb-2">金額</label>
+                        <input type="number" id="amount-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="請輸入金額...">
+                    </div>
+                </div>
+                <div class="p-4 bg-gray-50 rounded-lg">
+                    <p class="text-lg font-medium text-gray-700">計算結果：</p>
+                    <p class="text-2xl font-bold text-gray-900 mt-1">傭金：<span id="commission-output">0</span> 元</p>
+                </div>
             </div>
             
             <!-- 功能按鈕區 -->
-            <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <button id="new-customer-btn" class="w-full bg-gray-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-gray-600">新增客戶</button>
                 <button id="save-customer-btn" class="w-full bg-cyan-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-cyan-700">儲存客戶資料</button>
                 <button id="load-customers-btn" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700">調閱客戶資料</button>
             </div>
@@ -129,6 +152,7 @@
         import { getFirestore, doc, getDoc, updateDoc, collection, addDoc, serverTimestamp, query, where, getDocs } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
         const { jsPDF } = window.jspdf;
+        let currentCustomerId = null; 
 
         try {
             const firebaseConfig = {
@@ -202,11 +226,11 @@
                         if (now > subEndDate) {
                             subscriptionStatusEl.textContent = `您的訂閱已於 ${subEndDate.toLocaleDateString()} 到期。`;
                             subscriptionStatusEl.className = 'mb-6 p-3 text-center rounded-md bg-red-100 text-red-700';
-                            document.querySelectorAll('.contract-btn, #save-customer-btn, #load-customers-btn').forEach(btn => btn.disabled = true);
+                            document.querySelectorAll('.contract-btn, #save-customer-btn, #load-customers-btn, #new-customer-btn').forEach(btn => btn.disabled = true);
                         } else {
                             subscriptionStatusEl.textContent = `您的訂閱將於 ${subEndDate.toLocaleDateString()} 到期。`;
                             subscriptionStatusEl.className = 'mb-6 p-3 text-center rounded-md bg-green-100 text-green-700';
-                            document.querySelectorAll('.contract-btn, #save-customer-btn, #load-customers-btn').forEach(btn => btn.disabled = false);
+                            document.querySelectorAll('.contract-btn, #save-customer-btn, #load-customers-btn, #new-customer-btn').forEach(btn => btn.disabled = false);
                         }
                     } else {
                         await signOut(auth);
@@ -230,7 +254,6 @@
                 }
             });
 
-            // 儲存客戶資料的函式
             document.getElementById('save-customer-btn').addEventListener('click', async () => {
                 const messageBox = document.getElementById('message-box');
                 const user = auth.currentUser;
@@ -241,36 +264,63 @@
                     return;
                 }
 
-                const { name, phone } = getFormValues();
-                if (!name || !phone) {
-                    messageBox.textContent = '請填寫客戶姓名及電話！';
+                const { name, phone, address, channel, amount, commission } = getFormValues();
+                if (!name || !phone || !address || !amount) {
+                    messageBox.textContent = '請填寫客戶姓名、電話、地址及金額！';
                     messageBox.className = 'my-6 p-3 text-center rounded-lg bg-red-100 text-red-700';
                     return;
                 }
                 
-                try {
-                    const customerData = {
-                        customerName: name,
-                        customerPhone: phone,
-                        createdBy: user.uid,
-                        createdAt: serverTimestamp()
-                    };
-                    
-                    const customersCollectionRef = collection(db, 'customers');
-                    await addDoc(customersCollectionRef, customerData);
-                    
-                    messageBox.textContent = '客戶資料已成功儲存！';
-                    messageBox.className = 'my-6 p-3 text-center rounded-lg bg-green-100 text-green-700';
+                const customerData = {
+                    customerName: name,
+                    customerPhone: phone,
+                    customerAddress: address,
+                    channel: channel.name,
+                    channelRate: channel.rate,
+                    amount: amount,
+                    commission: commission,
+                    createdBy: user.uid,
+                };
 
-                    document.getElementById('name-input').value = '';
-                    document.getElementById('phone-input').value = '';
+                try {
+                    if (currentCustomerId) {
+                        const customerDocRef = doc(db, 'customers', currentCustomerId);
+                        await updateDoc(customerDocRef, customerData);
+                        messageBox.textContent = '客戶資料已成功更新！';
+                    } else {
+                        customerData.createdAt = serverTimestamp();
+                        const customersCollectionRef = collection(db, 'customers');
+                        await addDoc(customersCollectionRef, customerData);
+                        messageBox.textContent = '客戶資料已成功儲存！';
+                    }
+                    
+                    messageBox.className = 'my-6 p-3 text-center rounded-lg bg-green-100 text-green-700';
+                    clearForm();
 
                 } catch (error) {
-                    console.error("儲存客戶資料失敗:", error);
-                    messageBox.textContent = `儲存失敗: ${error.message}`;
+                    console.error("儲存/更新客戶資料失敗:", error);
+                    messageBox.textContent = `操作失敗: ${error.message}`;
                     messageBox.className = 'my-6 p-3 text-center rounded-lg bg-red-100 text-red-700';
                 }
             });
+            
+            document.getElementById('new-customer-btn').addEventListener('click', clearForm);
+
+            function clearForm() {
+                document.getElementById('name-input').value = '';
+                document.getElementById('phone-input').value = '';
+                document.getElementById('address-input').value = '';
+                document.getElementById('channel-select').value = '0';
+                document.getElementById('amount-input').value = '';
+                updateCommissionDisplay();
+                currentCustomerId = null; 
+                
+                const saveBtn = document.getElementById('save-customer-btn');
+                saveBtn.textContent = '儲存客戶資料';
+                saveBtn.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+                saveBtn.classList.add('bg-cyan-600', 'hover:bg-cyan-700');
+            }
+
 
             // --- 調閱客戶資料邏輯 ---
             const loadCustomersBtn = document.getElementById('load-customers-btn');
@@ -341,6 +391,17 @@
                     tr.addEventListener('click', () => {
                         document.getElementById('name-input').value = customer.customerName;
                         document.getElementById('phone-input').value = customer.customerPhone;
+                        document.getElementById('address-input').value = customer.customerAddress || '';
+                        document.getElementById('channel-select').value = customer.channelRate || '0';
+                        document.getElementById('amount-input').value = customer.amount || '';
+                        updateCommissionDisplay();
+                        
+                        currentCustomerId = customer.id;
+                        const saveBtn = document.getElementById('save-customer-btn');
+                        saveBtn.textContent = '更新客戶資料';
+                        saveBtn.classList.remove('bg-cyan-600', 'hover:bg-cyan-700');
+                        saveBtn.classList.add('bg-orange-500', 'hover:bg-orange-600');
+
                         customerListModal.classList.add('hidden');
                     });
 
@@ -377,13 +438,12 @@
         }
 
         // --- 合約產生器既有程式碼 ---
-        // **核心修正**：使用您指定且驗證過可行的字體檔名
         const fontFileName = 'NotoSansTC-VariableFont_wght.ttf';
         let loadedFontBase64 = null;
         const contractTemplates = {
-           1: { title: "保密協議 (NDA)", filename: "Confidentiality_Agreement.pdf", content: `立協議書人：甲方（揭露方）與乙方 ({{NAME}})（收受方）\n連絡電話：{{PHONE}}\n\n茲因甲方擬向乙方揭露其擁有之機密資訊，為確保甲方之機密資訊不致外洩，雙方爰同意訂定下列條款，以資共同遵守：\n第一條：機密資訊\n本協議所稱之「機密資訊」，係指甲方以口頭或書面方式標示為「機密」或「限閱」等類似字樣，或依其性質應認定為機密之任何商業、技術、財務、產品或營運等相關資訊。\n第二條：保密義務\n乙方同意，對於自甲方收受之任何機密資訊，均應以善良管理人之注意義務妥善保管，除為執行雙方合作業務之目的外，不得洩漏或交付予任何第三人。\n第三條：協議期限\n本協議自簽署之日起生效，有效期間為五年。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` },
-           2: { title: "勞動合約", filename: "Employment_Contract.pdf", content: `立合約書人：\n甲方（雇主）：____________________\n乙方（勞工）：{{NAME}}\n連絡電話：{{PHONE}}\n\n茲為聘僱事宜，經雙方同意訂立勞動契約，條款如下：\n第一條：職務\n甲方聘僱乙方擔任 ___________ 職務。\n第二條：工作地點\n乙方之工作地點為 ____________________。\n第三條：薪資\n薪資議定為每月新台幣 ___________ 元整，於次月五日前發放。\n第四條：合約期間\n本合約為不定期契約，自民國 ____ 年 __ 月 __ 日起生效。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` },
-           3: { title: "房屋租賃合約", filename: "Rental_Agreement.pdf", content: `立合約書人：\n出租人（以下簡稱甲方）：____________________\n承租人（以下簡稱乙方）：{{NAME}}\n連絡電話：{{PHONE}}\n\n茲為房屋租賃事宜，雙方同意訂立本契約，條款如下：\n第一條：租賃標的\n房屋座落於 ____________________。\n第二條：租賃期間\n自民國 ____ 年 __ 月 __ 日起至民國 ____ 年 __ 月 __ 日止。\n第三條：租金\n每月租金為新台幣 ___________ 元整，乙方應於每月五日前支付予甲方。\n第四條：押金\n乙方應於簽約時支付甲方新台幣 ___________ 元整作為押金。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` }
+           1: { title: "保密協議 (NDA)", filename: "Confidentiality_Agreement.pdf", content: `立協議書人：甲方（揭露方）與乙方 ({{NAME}})（收受方）\n連絡電話：{{PHONE}}\n地址：{{ADDRESS}}\n通路方案：{{CHANNEL_NAME}}\n金額：{{AMOUNT}} 元\n傭金：{{COMMISSION}} 元\n\n茲因甲方擬向乙方揭露其擁有之機密資訊，為確保甲方之機密資訊不致外洩，雙方爰同意訂定下列條款，以資共同遵守：\n第一條：機密資訊\n本協議所稱之「機密資訊」，係指甲方以口頭或書面方式標示為「機密」或「限閱」等類似字樣，或依其性質應認定為機密之任何商業、技術、財務、產品或營運等相關資訊。\n第二條：保密義務\n乙方同意，對於自甲方收受之任何機密資訊，均應以善良管理人之注意義務妥善保管，除為執行雙方合作業務之目的外，不得洩漏或交付予任何第三人。\n第三條：協議期限\n本協議自簽署之日起生效，有效期間為五年。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` },
+           2: { title: "勞動合約", filename: "Employment_Contract.pdf", content: `立合約書人：\n甲方（雇主）：____________________\n乙方（勞工）：{{NAME}}\n連絡電話：{{PHONE}}\n地址：{{ADDRESS}}\n\n茲為聘僱事宜，經雙方同意訂立勞動契約，條款如下：\n第一條：職務\n甲方聘僱乙方擔任 ___________ 職務。\n第二條：工作地點\n乙方之工作地點為 {{ADDRESS}}。\n第三條：薪資\n薪資議定為每月新台幣 ___________ 元整，於次月五日前發放。\n第四條：合約期間\n本合約為不定期契約，自民國 ____ 年 __ 月 __ 日起生效。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` },
+           3: { title: "房屋租賃合約", filename: "Rental_Agreement.pdf", content: `立合約書人：\n出租人（以下簡稱甲方）：____________________\n承租人（以下簡稱乙方）：{{NAME}}\n連絡電話：{{PHONE}}\n地址：{{ADDRESS}}\n\n茲為房屋租賃事宜，雙方同意訂立本契約，條款如下：\n第一條：租賃標的\n房屋座落於 {{ADDRESS}}。\n第二條：租賃期間\n自民國 ____ 年 __ 月 __ 日起至民國 ____ 年 __ 月 __ 日止。\n第三條：租金\n每月租金為新台幣 ___________ 元整，乙方應於每月五日前支付予甲方。\n第四條：押金\n乙方應於簽約時支付甲方新台幣 ___________ 元整作為押金。\n\n立協議書人：\n甲方：____________________\n乙方：{{NAME}}\n日期：____________________` }
        };
         
         async function loadFont() {
@@ -397,17 +457,36 @@
             loadedFontBase64 = window.btoa(binary);
         }
 
+        const channelSelect = document.getElementById('channel-select');
+        const amountInput = document.getElementById('amount-input');
+        const commissionOutput = document.getElementById('commission-output');
+
+        function updateCommissionDisplay() {
+            const rate = parseFloat(channelSelect.value) || 0;
+            const amount = parseFloat(amountInput.value) || 0;
+            const commission = amount * rate;
+            commissionOutput.textContent = commission.toLocaleString();
+        }
+
+        channelSelect.addEventListener('change', updateCommissionDisplay);
+        amountInput.addEventListener('input', updateCommissionDisplay);
+
         function getFormValues() { 
             const name = document.getElementById('name-input').value.trim(); 
-            const phone = document.getElementById('phone-input').value.trim(); 
-            return { name, phone };
+            const phone = document.getElementById('phone-input').value.trim();
+            const address = document.getElementById('address-input').value.trim();
+            const channelRate = parseFloat(channelSelect.value) || 0;
+            const channelName = channelSelect.options[channelSelect.selectedIndex].text;
+            const amount = parseFloat(amountInput.value) || 0;
+            const commission = amount * channelRate;
+            return { name, phone, address, channel: { name: channelName, rate: channelRate }, amount, commission };
         }
         
         async function processPDFGeneration(logic, button) {
             const messageBox = document.getElementById('message-box');
-            const { name, phone } = getFormValues();
-            if (!name || !phone) {
-                messageBox.textContent = '請填寫所有欄位！';
+            const { name, phone, address, amount } = getFormValues();
+            if (!name || !phone || !address || !amount) {
+                messageBox.textContent = '請填寫所有客戶資料欄位！';
                 messageBox.className = 'my-6 p-3 text-center rounded-lg bg-red-100 text-red-700';
                 return;
             }
@@ -420,7 +499,7 @@
 
             try {
                 await loadFont();
-                await logic(name, phone);
+                await logic();
             } catch (error) {
                 console.error("PDF 產生失敗:", error);
                 messageBox.textContent = `產生 PDF 失敗: ${error.message}。`;
@@ -437,9 +516,17 @@
         }
 
         window.generateContract = (type, clickedButton) => {
-            processPDFGeneration((name, phone) => {
+            processPDFGeneration(() => {
+                const { name, phone, address, channel, amount, commission } = getFormValues();
                 const template = contractTemplates[type];
-                const finalContent = template.content.replace(/{{NAME}}/g, name).replace(/{{PHONE}}/g, phone);
+                const finalContent = template.content
+                    .replace(/{{NAME}}/g, name)
+                    .replace(/{{PHONE}}/g, phone)
+                    .replace(/{{ADDRESS}}/g, address)
+                    .replace(/{{CHANNEL_NAME}}/g, channel.name)
+                    .replace(/{{AMOUNT}}/g, amount.toLocaleString())
+                    .replace(/{{COMMISSION}}/g, commission.toLocaleString());
+
                 const doc = new jsPDF();
                 doc.addFileToVFS(fontFileName, loadedFontBase64);
                 doc.addFont(fontFileName, 'NotoSansTC', 'normal');
@@ -454,10 +541,18 @@
 
         window.generateAllContracts = () => {
             const downloadAllButton = document.getElementById('download-all-btn');
-            processPDFGeneration(async (name, phone) => {
+            processPDFGeneration(async () => {
+                const { name, phone, address, channel, amount, commission } = getFormValues();
                 for (const type in contractTemplates) {
                     const template = contractTemplates[type];
-                    const finalContent = template.content.replace(/{{NAME}}/g, name).replace(/{{PHONE}}/g, phone);
+                    const finalContent = template.content
+                        .replace(/{{NAME}}/g, name)
+                        .replace(/{{PHONE}}/g, phone)
+                        .replace(/{{ADDRESS}}/g, address)
+                        .replace(/{{CHANNEL_NAME}}/g, channel.name)
+                        .replace(/{{AMOUNT}}/g, amount.toLocaleString())
+                        .replace(/{{COMMISSION}}/g, commission.toLocaleString());
+                        
                     const doc = new jsPDF();
                     doc.addFileToVFS(fontFileName, loadedFontBase64);
                     doc.addFont(fontFileName, 'NotoSansTC', 'normal');
